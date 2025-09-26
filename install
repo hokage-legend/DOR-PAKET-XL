@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# --- Konfigurasi ---
+SERVICE_NAME="dor-xl-bot"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+PROJECT_DIRECTORY="/root/me-cli" # Pastikan ini path yang benar
+PYTHON_PATH=$(which python3) # Mencari path python3 secara otomatis
+MAIN_SCRIPT="main.py"
+
+# Memastikan skrip dijalankan sebagai root
+if [ "$(id -u)" != "0" ]; then
+   echo "Skrip ini harus dijalankan sebagai root. Coba jalankan dengan 'sudo bash install_service.sh'" 1>&2
+   exit 1
+fi
+
+echo "Membuat file service untuk ${SERVICE_NAME}..."
+
+# Membuat konten file service menggunakan cat heredoc
+cat << EOF > ${SERVICE_FILE}
+[Unit]
+Description=Telegram Bot Dor-XL Service
+After=network.target
+
+[Service]
+User=root
+Group=root
+
+WorkingDirectory=${PROJECT_DIRECTORY}
+ExecStart=${PYTHON_PATH} ${PROJECT_DIRECTORY}/${MAIN_SCRIPT}
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Mengatur izin file service
+chmod 644 ${SERVICE_FILE}
+
+echo "File service berhasil dibuat di ${SERVICE_FILE}"
+echo ""
+echo "Menjalankan systemctl daemon-reload..."
+systemctl daemon-reload
+
+echo "Mengaktifkan service agar berjalan saat boot..."
+systemctl enable ${SERVICE_NAME}.service
+
+echo ""
+echo "Instalasi selesai! Anda sekarang bisa mengelola bot Anda dengan perintah:"
+echo "------------------------------------------------------------------"
+echo "Untuk memulai bot sekarang:         sudo systemctl start ${SERVICE_NAME}"
+echo "Untuk menghentikan bot:             sudo systemctl stop ${SERVICE_NAME}"
+echo "Untuk memulai ulang bot:            sudo systemctl restart ${SERVICE_NAME}"
+echo "Untuk melihat status bot:           sudo systemctl status ${SERVICE_NAME}"
+echo "Untuk melihat log bot secara live:  sudo journalctl -u ${SERVICE_NAME} -f"
+echo "------------------------------------------------------------------"
+echo ""
+echo "Disarankan untuk memulai bot sekarang dengan 'sudo systemctl start ${SERVICE_NAME}'"

@@ -1,0 +1,10 @@
+Brotli
+certifi
+charset-normalizer
+idna
+pycryptodome
+requests
+urllib3
+qrcode
+ascii_magic
+python-dotenv
