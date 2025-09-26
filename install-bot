@@ -1,43 +1,45 @@
 #!/bin/bash
 
 # ==============================================================================
-# Skrip Instalasi Otomatis untuk Bot Telegram & Server Webhook
-# Dibuat untuk repositori: github.com/hokage-legend/DOR-PAKET-XL
-# Pastikan skrip ini dijalankan sebagai root atau dengan sudo.
+# Skrip Instalasi Otomatis Final untuk Bot Telegram & Server Webhook
+# Dirancang untuk Ubuntu 24.04+ dan distro Debian modern (dengan PEP 668)
+# Repositori: github.com/hokage-legend/DOR-PAKET-XL
+# Wajib dijalankan sebagai root atau dengan sudo.
 # ==============================================================================
 
 # --- Variabel Konfigurasi ---
-# Ganti ini dengan URL repositori Anda. Gunakan HTTPS agar tidak perlu setup SSH key.
 GIT_REPO_URL="https://github.com/hokage-legend/DOR-PAKET-XL.git"
-# Direktori tempat proyek akan diinstall
 PROJECT_DIR="/root/me-cli"
-# Port yang akan digunakan oleh server webhook
 WEBHOOK_PORT=8070
 
-# --- Fungsi untuk mencetak pesan ---
+# --- Fungsi untuk mencetak pesan dengan jelas ---
 print_info() {
     echo " "
+    echo "=================================================="
     echo "--> $1"
+    echo "=================================================="
     echo " "
 }
 
-# --- 1. Persiapan Sistem ---
-print_info "Memperbarui daftar paket dan menginstall dependensi dasar..."
+# --- 1. Persiapan Sistem & Dependensi Dasar ---
+print_info "Memperbarui sistem dan menginstall dependensi dasar..."
 apt-get update
-apt-get install -y python3 python3-pip git 
+# Menginstall python3-venv adalah kunci untuk mengatasi error 'externally-managed-environment'
+apt-get install -y python3 python3-pip git ufw python3-venv
 
 # --- 2. Kloning Repositori dari GitHub ---
-print_info "Menghapus direktori lama (jika ada) dan mengkloning repositori..."
+print_info "Mengkloning repositori dari GitHub..."
 # Hapus direktori lama untuk memastikan instalasi bersih
 rm -rf $PROJECT_DIR
-# Kloning repositori ke direktori tujuan
 git clone $GIT_REPO_URL $PROJECT_DIR
 
-# --- 3. Instalasi Dependensi Python ---
-print_info "Menginstall library Python yang dibutuhkan dari requirements.txt..."
-# Pindah ke direktori proyek
+# --- 3. Setup Virtual Environment (venv) & Instalasi Python ---
+print_info "Membuat Virtual Environment dan menginstall semua library Python..."
 cd $PROJECT_DIR
-# Buat file requirements.txt jika belum ada
+# Membuat 'bengkel' atau venv terpisah untuk proyek ini
+python3 -m venv venv
+
+# Membuat file requirements.txt dengan SEMUA dependensi yang kita temukan
 cat << EOF > requirements.txt
 python-telegram-bot
 requests
@@ -45,26 +47,37 @@ python-dotenv
 qrcode
 Flask
 gunicorn
+Brotli
+pycryptodome
 EOF
-# Install semua library
-pip3 install -r requirements.txt
 
-# --- 4. Konfigurasi Environment (.env) ---
-print_info "Membuat file konfigurasi .env. Harap isi dengan token dan key Anda."
-# Cek jika file .env sudah ada, jika belum, buat dari contoh
+# Menginstall semua library ke dalam venv (ini cara yang benar dan aman)
+venv/bin/pip install -r requirements.txt
+
+# --- 4. Konfigurasi Rahasia (.env) ---
+print_info "Membuat file konfigurasi .env. Harap isi dengan data rahasia Anda."
 if [ ! -f ".env" ]; then
     cat << EOF > .env
-# Ganti dengan nilai Anda yang sebenarnya
+# === BAGIAN TELEGRAM & ATLANTIC ===
 TELEGRAM_BOT_TOKEN="MASUKKAN_BOT_TOKEN_ANDA_DI_SINI"
 ATLANTIC_API_KEY="MASUKKAN_API_KEY_ATLANTIC_ANDA_DI_SINI"
 ATLANTIC_API_USERNAME="MASUKKAN_USERNAME_API_ATLANTIC_ANDA_DI_SINI"
+
+# === BAGIAN API MyXL (ENGSEL) ===
+BASE_API_URL="https://api.myxl.xlaxiata.co.id"
+BASE_CIAM_URL="https://gede.ciam.xlaxiata.co.id"
+BASIC_AUTH="OWZjOTdlZDEtNmEzMC00OGQ1LTk1MTYtNjBjNTNjZTNhMTM1OllEV21GNExKajlYSUt3UW56eTJlMmxiMHRKUWIyOW8z"
+AX_DEVICE_ID="92fb44c0804233eb4d9e29f838223a14"
+AX_FP_KEY="18b4d589826af50241177961590e6693"
+UA="myXL / 8.7.0(1189); com.android.vending; (samsung; SM-N935F; SDK 33; Android 13"
+API_KEY="5ef27d6e-1dbf-42cc-9b44-8a9a7f8c8251"
 EOF
-    print_info "File .env telah dibuat. Silakan edit file ini sekarang:"
-    echo "nano ${PROJECT_DIR}/.env"
-    read -p "Tekan [Enter] setelah Anda selesai mengedit file .env..."
+    print_info "File .env telah dibuat. Silakan edit file ini sekarang dengan data Anda."
+    echo "Jalankan perintah ini di terminal baru: nano ${PROJECT_DIR}/.env"
+    read -p "Tekan [Enter] setelah Anda selesai mengedit dan menyimpan file .env..."
 fi
 
-# --- 5. Membuat File Service untuk Bot Utama ---
+# --- 5. Membuat File Service untuk Bot Utama (menggunakan venv) ---
 print_info "Membuat file service untuk bot Telegram (dor-xl-bot.service)..."
 cat << EOF > /etc/systemd/system/dor-xl-bot.service
 [Unit]
@@ -74,14 +87,15 @@ After=network.target
 [Service]
 User=root
 WorkingDirectory=${PROJECT_DIR}
-ExecStart=/usr/bin/python3 ${PROJECT_DIR}/main.py
+# Menjalankan main.py menggunakan Python dari dalam venv
+ExecStart=${PROJECT_DIR}/venv/bin/python3 ${PROJECT_DIR}/main.py
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# --- 6. Membuat File Service untuk Webhook Server ---
+# --- 6. Membuat File Service untuk Webhook Server (menggunakan venv) ---
 print_info "Membuat file service untuk webhook server (webhook.service)..."
 cat << EOF > /etc/systemd/system/webhook.service
 [Unit]
@@ -92,17 +106,22 @@ After=network.target
 User=root
 Group=www-data
 WorkingDirectory=${PROJECT_DIR}
-ExecStart=/usr/local/bin/gunicorn --workers 3 --bind 0.0.0.0:${WEBHOOK_PORT} webhook_server:app
+# Menjalankan gunicorn dari dalam venv
+ExecStart=${PROJECT_DIR}/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:${WEBHOOK_PORT} webhook_server:app
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-
+# --- 7. Konfigurasi Firewall (UFW) ---
+print_info "Mengkonfigurasi firewall untuk mengizinkan port ${WEBHOOK_PORT}..."
+ufw allow ${WEBHOOK_PORT}/tcp
+ufw allow ssh # Sangat penting agar Anda tidak terkunci
+ufw --force enable
 
 # --- 8. Menjalankan Semuanya ---
-print_info "Menjalankan bot dan server webhook..."
+print_info "Menjalankan bot dan server webhook sebagai service..."
 systemctl daemon-reload
 systemctl enable dor-xl-bot.service
 systemctl enable webhook.service
@@ -110,16 +129,13 @@ systemctl start dor-xl-bot.service
 systemctl start webhook.service
 
 # --- Selesai ---
-print_info "Instalasi Selesai!"
-echo "Bot dan server webhook Anda sekarang berjalan di belakang layar."
+print_info "INSTALASI SELESAI!"
+echo "Bot dan server webhook Anda sekarang berjalan secara permanen di belakang layar."
 echo " "
-echo "Gunakan perintah berikut untuk memeriksa status:"
+echo "Gunakan perintah ini untuk memeriksa status:"
 echo "sudo systemctl status dor-xl-bot.service"
 echo "sudo systemctl status webhook.service"
 echo " "
-echo "Gunakan perintah berikut untuk melihat log:"
-echo "sudo journalctl -u dor-xl-bot -f"
-echo "sudo journalctl -u webhook -f"
-echo " "
-echo "PENTING: Pastikan URL callback di dashboard Atlantic Anda sudah benar:"
-echo "http://IP_SERVER_BARU_ANDA:${WEBHOOK_PORT}/webhook/atlantic"
+echo "PENTING: Jangan lupa update URL callback di dashboard Atlantic dengan IP BARU Anda!"
+echo "URL Webhook Anda: http://IP_SERVER_BARU_ANDA:${WEBHOOK_PORT}/webhook/atlantic"
+
